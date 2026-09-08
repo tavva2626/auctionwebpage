@@ -8,6 +8,7 @@ import HostAuctionPage from './pages/HostAuctionPage';
 import BidderJoinPage from './pages/BidderJoinPage';
 import AuctionRoomPage from './pages/AuctionRoomPage';
 import MultiItemAuctionCreatePage from './pages/MultiItemAuctionCreatePage';
+import MultiItemAddItemsPage from './pages/MultiItemAddItemsPage';
 import MultiItemAuctionHostPage from './pages/MultiItemAuctionHostPage';
 import MultiItemBidderJoinPage from './pages/MultiItemBidderJoinPage';
 import MultiItemAuctionBidderPage from './pages/MultiItemAuctionBidderPage';
@@ -76,6 +77,7 @@ function App() {
             
             {/* Multi Item Auction Routes */}
             <Route path="/host/multi-create" element={<ProtectedRoute><MultiItemAuctionCreatePage /></ProtectedRoute>} />
+            <Route path="/host/multi-add-items" element={<ProtectedRoute><MultiItemAddItemsPage /></ProtectedRoute>} />
             <Route path="/host/multi-auction/:auctionId" element={<ProtectedRoute><MultiItemAuctionHostPage /></ProtectedRoute>} />
             <Route path="/bid/multi-join" element={<ProtectedRoute><MultiItemBidderJoinPage /></ProtectedRoute>} />
             <Route path="/multi-auction/:auctionId" element={<ProtectedRoute><MultiItemAuctionBidderPage /></ProtectedRoute>} />
