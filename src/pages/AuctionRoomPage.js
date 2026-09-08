@@ -8,11 +8,11 @@ import {
   listenAuctionRemote, 
   placeBidRemote, 
   dropBidRemote, 
-  getAuctionRemote,
   leaveAuctionRemote 
 } from '../utils/firestoreAuctions';
 import { usePageTitle } from '../hooks/usePageTitle';
 import ModalDialog from '../components/ModalDialog';
+import ParticipantsList from '../components/ParticipantsList';
 
 export default function AuctionRoomPage() {
   usePageTitle('Bidder - Auction Room');
@@ -42,6 +42,8 @@ export default function AuctionRoomPage() {
     return storedBidder;
   })();
 
+  const currency = auction?.currency || 'USD';
+
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(interval);
@@ -65,27 +67,135 @@ export default function AuctionRoomPage() {
     );
   }
 
-  // EXPIRED STATE
+  // EXPIRED STATE - Enhanced completed view
   if (auction.status === 'ended') {
     const finalWinner = getWinner(auction);
     return (
       <main className="page">
-        <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
-          <h2 style={{ color: '#ef4444', fontSize: '2rem' }}>🔴 Auction Expired</h2>
-          <p style={{ margin: '1rem 0' }}>This auction session has been completed by the host. Participation is no longer possible.</p>
-          
-          <div style={{ background: 'rgba(34, 197, 94, 0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid #22c55e', marginTop: '1.5rem' }}>
-            <h3 style={{ margin: 0, color: '#22c55e' }}>🏆 Winner</h3>
-            {finalWinner ? (
-              <p style={{ fontSize: '1.2rem', fontWeight: 600 }}>{finalWinner.bidder.name} won at {formatCurrency(finalWinner.bid)}</p>
-            ) : (
-              <p>No bids were placed.</p>
+        <div className="auction-layout-container" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          <div className="card" style={{ padding: '2.5rem' }}>
+            {/* Completion Banner */}
+            <div style={{
+              padding: '1.5rem',
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.03))',
+              borderRadius: '16px',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              marginBottom: '2rem',
+              textAlign: 'center',
+            }}>
+              <h2 style={{ margin: '0 0 0.5rem', color: '#ef4444', fontSize: '1.8rem' }}>🔴 Auction Expired</h2>
+              <p style={{ margin: 0, color: 'var(--muted)', fontSize: '1rem', lineHeight: '1.5' }}>
+                This auction session has been completed by the host. Participation is no longer possible.
+              </p>
+            </div>
+
+            {/* Item Photo */}
+            {auction.images?.[0] && (
+              <div style={{
+                width: '100%',
+                height: '350px',
+                backgroundColor: '#f3f4f6',
+                borderRadius: '16px',
+                overflow: 'hidden',
+                margin: '0 0 2rem',
+                border: '1px solid #e5e7eb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <img
+                  src={auction.images[0]}
+                  alt={auction.title}
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                />
+              </div>
             )}
+
+            {/* Item Details Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+              gap: '1rem',
+              marginBottom: '2rem',
+            }}>
+              <div style={{ padding: '1rem', background: 'var(--secondary)', borderRadius: '12px', textAlign: 'center' }}>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Item Name</p>
+                <p style={{ margin: '0.25rem 0 0', fontWeight: 700, color: 'var(--text)', fontSize: '1.1rem' }}>{auction.title}</p>
+              </div>
+              <div style={{ padding: '1rem', background: 'var(--secondary)', borderRadius: '12px', textAlign: 'center' }}>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Base Price</p>
+                <p style={{ margin: '0.25rem 0 0', fontWeight: 700, color: '#3b82f6', fontSize: '1.1rem' }}>{formatCurrency(auction.basePrice, currency)}</p>
+              </div>
+              <div style={{ padding: '1rem', background: 'var(--secondary)', borderRadius: '12px', textAlign: 'center' }}>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Total Bidders</p>
+                <p style={{ margin: '0.25rem 0 0', fontWeight: 700, color: 'var(--text)', fontSize: '1.1rem' }}>{auction.bidders?.length || 0}</p>
+              </div>
+              <div style={{ padding: '1rem', background: 'var(--secondary)', borderRadius: '12px', textAlign: 'center' }}>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Host</p>
+                <p style={{ margin: '0.25rem 0 0', fontWeight: 700, color: 'var(--text)', fontSize: '1.1rem' }}>{auction.createdBy}</p>
+              </div>
+            </div>
+
+            {/* Description */}
+            {auction.description && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text)' }}>📝 Description</h3>
+                <p style={{ margin: 0, lineHeight: '1.6', color: 'var(--text)' }}>{auction.description}</p>
+              </div>
+            )}
+
+            {/* History/Provenance */}
+            {auction.history && (
+              <div style={{ 
+                padding: '1rem', 
+                background: 'rgba(59, 130, 246, 0.03)', 
+                borderRadius: '10px', 
+                borderLeft: '4px solid #3b82f6',
+                marginBottom: '2rem'
+              }}>
+                <h4 style={{ margin: '0 0 0.5rem', color: '#3b82f6' }}>📜 Item Provenance & History</h4>
+                <p style={{ margin: 0, fontSize: '0.95rem', fontStyle: 'italic' }}>{auction.history}</p>
+              </div>
+            )}
+
+            {/* Winner Card */}
+            <div style={{
+              padding: '2rem',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.05))',
+              border: '2px solid rgba(34, 197, 94, 0.3)',
+              textAlign: 'center',
+              marginBottom: '2rem',
+            }}>
+              <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🏆</div>
+              <h3 style={{ margin: '0 0 0.75rem', color: '#22c55e', fontSize: '1.3rem' }}>Winner</h3>
+              {finalWinner ? (
+                <>
+                  <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>
+                    {finalWinner.bidder.name}
+                  </p>
+                  <p style={{ margin: '0.5rem 0 0', fontSize: '1.2rem', fontWeight: 600, color: '#22c55e' }}>
+                    Winning Bid: {formatCurrency(finalWinner.bid, currency)}
+                  </p>
+                </>
+              ) : (
+                <p style={{ color: 'var(--muted)', fontSize: '1.1rem' }}>No bids were placed.</p>
+              )}
+            </div>
+            
+            <button className="primary" style={{ width: '100%' }} onClick={() => navigate('/home')}>
+              Back to Dashboard
+            </button>
           </div>
-          
-          <button className="primary" style={{ marginTop: '2rem' }} onClick={() => navigate('/home')}>
-            Back to Dashboard
-          </button>
+
+          {/* Participants Sidebar */}
+          <div className="card bidder-list">
+            <ParticipantsList
+              bidders={auction.bidders || []}
+              currentBidderId={bidder?.bidderId}
+              currency={currency}
+            />
+          </div>
         </div>
       </main>
     );
@@ -205,11 +315,11 @@ export default function AuctionRoomPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
           <div style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.1)' }}>
             <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Base Price</p>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: '1.2rem', color: 'var(--text)' }}>{formatCurrency(auction.basePrice)}</p>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '1.2rem', color: 'var(--text)' }}>{formatCurrency(auction.basePrice, currency)}</p>
           </div>
           <div style={{ background: 'rgba(245, 158, 11, 0.05)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
             <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Current Bid</p>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: '1.2rem', color: '#f59e0b' }}>{formatCurrency(highestBid)}</p>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '1.2rem', color: '#f59e0b' }}>{formatCurrency(highestBid, currency)}</p>
           </div>
         </div>
 
@@ -310,12 +420,12 @@ export default function AuctionRoomPage() {
         {canBid && !isDropped && !hasLeft && (
           <form className="bid-form" onSubmit={handleBid}>
             <label>
-              Your bid (USD)
+              Your bid ({currency})
               <input
                 type="number"
                 value={bidAmount}
                 onChange={(e) => setBidAmount(e.target.value)}
-                placeholder={`Minimum: $${Math.floor(highestBid) + 1}`}
+                placeholder={`Minimum: ${formatCurrency(Math.floor(highestBid) + 1, currency)}`}
               />
             </label>
             {error && <div className="form-error">{error}</div>}
@@ -345,41 +455,11 @@ export default function AuctionRoomPage() {
       </section>
 
       <section className="card bid-list">
-        <h2>Participants</h2>
-        {auction.bidders?.length ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Bidder</th>
-                <th>Last bid</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {auction.bidders
-                .slice()
-                .sort((a, b) => (b.lastBid || 0) - (a.lastBid || 0))
-                .map((b, idx) => (
-                <tr key={b.id} className={b.id === bidder.bidderId ? 'current-bidder' : ''} style={{ opacity: (b.status === 'dropped' || b.status === 'left') ? 0.6 : 1 }}>
-                  <td>
-                    #{idx + 1} - {b.name} {b.id === bidder.bidderId && <span className="badge">(You)</span>}
-                  </td>
-                  <td className="bid-amount">{formatCurrency(b.lastBid || 0)}</td>
-                  <td>
-                    <span className="badge" style={{ 
-                      background: b.status === 'active' ? '#22c55e' : (b.status === 'dropped' ? '#ef4444' : '#f59e0b'),
-                      color: 'white'
-                    }}>
-                      {b.status === 'active' ? 'Active' : (b.status === 'dropped' ? 'Dropped' : 'Left')}
-                    </span>
-                  </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        ) : (
-          <p>No participants yet.</p>
-        )}
+        <ParticipantsList
+          bidders={auction.bidders || []}
+          currentBidderId={bidder.bidderId}
+          currency={currency}
+        />
       </section>
       </div>
 

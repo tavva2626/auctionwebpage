@@ -10,6 +10,7 @@ import {
 } from '../utils/firestoreAuctions';
 import { usePageTitle } from '../hooks/usePageTitle';
 import ModalDialog from '../components/ModalDialog';
+import ParticipantsList from '../components/ParticipantsList';
 
 export default function MultiItemAuctionBidderPage() {
   usePageTitle('Bidder - Multi-Item AuctionRoom');
@@ -38,6 +39,8 @@ export default function MultiItemAuctionBidderPage() {
     if (storedBidder.auctionId !== auctionId) return null;
     return storedBidder;
   })();
+
+  const currency = auction?.currency || 'USD';
 
   useEffect(() => {
     const unsub = listenMultiItemAuctionRemote(auctionId, (data) => {
@@ -80,13 +83,106 @@ export default function MultiItemAuctionBidderPage() {
     );
   }
 
+  // Enhanced completed auction view
   if (auction.status === 'ended') {
+    const getWinnerForItem = (item) => {
+      if (!item?.bidders?.length) return null;
+      let winner = null;
+      item.bidders.forEach((b) => {
+        const bid = b.lastBid ?? item.basePrice ?? 0;
+        if (!winner || bid > (winner.bid ?? 0)) {
+          winner = { bidder: b, bid };
+        }
+      });
+      return winner;
+    };
+
     return (
       <main className="page">
-        <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
-          <h2 style={{ color: '#ef4444' }}>🔴 Auction Expired</h2>
-          <p>This auction session has already been completed by the host.</p>
-          <button className="primary" onClick={() => navigate('/home')}>Back to home</button>
+        <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+          {/* Completion Banner */}
+          <div className="card" style={{ textAlign: 'center', marginBottom: '2rem' }}>
+            <h2 style={{ color: '#ef4444', fontSize: '1.8rem', margin: '0 0 0.5rem' }}>🔴 Auction Completed</h2>
+            <p style={{ margin: 0, color: 'var(--muted)', fontSize: '1rem', lineHeight: '1.5' }}>
+              This auction session has been completed by the host. Participation is no longer possible.
+            </p>
+          </div>
+
+          {/* Results for each item */}
+          <h2 style={{ margin: '0 0 1.5rem', color: 'var(--text)' }}>📦 Auction Results</h2>
+          {auction.items?.map((item, idx) => {
+            const itemWinner = getWinnerForItem(item);
+            return (
+              <div key={item.id} className="card" style={{ marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  {/* Item Image */}
+                  {item.images?.[0] && (
+                    <div style={{
+                      width: '180px',
+                      height: '140px',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      border: '1px solid #e5e7eb',
+                      flexShrink: 0,
+                      background: '#f3f4f6',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <img src={item.images[0]} alt={item.title} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                    </div>
+                  )}
+
+                  {/* Item Details */}
+                  <div style={{ flex: 1, minWidth: '200px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Item {idx + 1}: {item.title}</h3>
+                      <span style={{
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '6px',
+                        background: '#22c55e',
+                        color: 'white',
+                      }}>✅ COMPLETED</span>
+                    </div>
+                    <p style={{ margin: '0.25rem 0 0.75rem', color: 'var(--muted)', fontSize: '0.9rem' }}>
+                      {item.description || 'No description'}
+                    </p>
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text)' }}>
+                        Base: <strong>{formatCurrency(item.basePrice, currency)}</strong>
+                      </span>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text)' }}>
+                        Bidders: <strong>{item.bidders?.length || 0}</strong>
+                      </span>
+                    </div>
+
+                    {/* Winner for this item */}
+                    <div style={{
+                      marginTop: '1rem',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '10px',
+                      background: itemWinner ? 'rgba(34, 197, 94, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                      border: `1px solid ${itemWinner ? 'rgba(34, 197, 94, 0.3)' : 'rgba(100, 116, 139, 0.2)'}`,
+                    }}>
+                      {itemWinner ? (
+                        <p style={{ margin: 0, fontWeight: 600, color: '#22c55e' }}>
+                          🏆 Won by <strong>{itemWinner.bidder.name}</strong> at {formatCurrency(itemWinner.bid, currency)}
+                        </p>
+                      ) : (
+                        <p style={{ margin: 0, color: 'var(--muted)' }}>No bids placed</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          <button className="primary" style={{ width: '100%', marginTop: '1rem' }} onClick={() => navigate('/home')}>
+            Back to Dashboard
+          </button>
         </div>
       </main>
     );
@@ -258,13 +354,13 @@ export default function MultiItemAuctionBidderPage() {
               <div>
                 <p style={{ margin: '0 0 0.25rem', color: 'var(--muted)', fontSize: '0.9rem' }}>Base Price</p>
                 <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#3b82f6' }}>
-                  {formatCurrency(currentItem.basePrice)}
+                  {formatCurrency(currentItem.basePrice, currency)}
                 </p>
               </div>
               <div>
                 <p style={{ margin: '0 0 0.25rem', color: 'var(--muted)', fontSize: '0.9rem' }}>Highest Bid</p>
                 <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#f59e0b' }}>
-                  {formatCurrency(highestBid)}
+                  {formatCurrency(highestBid, currency)}
                 </p>
               </div>
               <div>
@@ -302,7 +398,7 @@ export default function MultiItemAuctionBidderPage() {
               <h3 style={{ margin: '0 0 0.75rem', color: '#22c55e' }}>⏰ Auction Ended for This Item</h3>
               {winner ? (
                 <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: 'var(--text)' }}>
-                  🏆 <strong>{winner.bidder.name}</strong> won at {formatCurrency(winner.bid)}
+                  🏆 <strong>{winner.bidder.name}</strong> won at {formatCurrency(winner.bid, currency)}
                 </p>
               ) : (
                 <p style={{ margin: 0, color: 'var(--muted)' }}>No bids were placed</p>
@@ -316,12 +412,12 @@ export default function MultiItemAuctionBidderPage() {
               <h3 style={{ marginTop: 0 }}>💰 Place Your Bid</h3>
               <form onSubmit={handleBid}>
                 <label>
-                  Bid Amount (USD)
+                  Bid Amount ({currency})
                   <input
                     type="number"
                     value={bidAmount}
                     onChange={(e) => setBidAmount(e.target.value)}
-                    placeholder={`Minimum: $${Math.floor(highestBid) + 1}`}
+                    placeholder={`Minimum: ${formatCurrency(Math.floor(highestBid) + 1, currency)}`}
                   />
                 </label>
                 {error && <div className="form-error">{error}</div>}
@@ -376,43 +472,11 @@ export default function MultiItemAuctionBidderPage() {
         <div>
           {/* Current Bidders */}
           <div className="card" style={{ maxHeight: '70vh', overflow: 'auto' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>
-              👥 Bidders ({(currentItem.bidders || []).length})
-            </h3>
-            {currentItem.bidders?.length ? (
-              <div>
-                {currentItem.bidders
-                  .slice()
-                  .sort((a, b) => (b.lastBid || 0) - (a.lastBid || 0))
-                  .map((b, idx) => (
-                    <div
-                      key={b.id}
-                      style={{
-                        padding: '0.75rem',
-                        background: b.id === bidder.bidderId ? 'rgba(59, 130, 246, 0.1)' : 'rgba(59, 130, 246, 0.04)',
-                        borderRadius: '8px',
-                        marginBottom: '0.5rem',
-                        borderLeft: `3px solid ${b.id === bidder.bidderId ? '#3b82f6' : '#e5e7eb'}`,
-                        opacity: (b.status === 'dropped' || b.status === 'left') ? 0.6 : 1
-                      }}
-                    >
-                      <p style={{ margin: '0 0 0.25rem', fontWeight: 600, color: 'var(--text)' }}>
-                        #{idx + 1} - {b.name} {b.id === bidder.bidderId && '(You)'} 
-                        {b.status === 'dropped' && ' 🚫'}
-                        {b.status === 'left' && ' 🚪'}
-                      </p>
-                      <p style={{ margin: 0, fontSize: '0.9rem', color: '#f59e0b' }}>
-                        {formatCurrency(b.lastBid || 0)}
-                      </p>
-                      <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted)' }}>
-                        {b.status === 'active' ? 'Active' : (b.status === 'dropped' ? 'Dropped' : 'Left')}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-            ) : (
-              <p style={{ color: 'var(--muted)' }}>No bidders yet</p>
-            )}
+            <ParticipantsList
+              bidders={currentItem.bidders || []}
+              currentBidderId={bidder.bidderId}
+              currency={currency}
+            />
           </div>
 
           {/* Items Gallery / Catalog */}
@@ -473,7 +537,7 @@ export default function MultiItemAuctionBidderPage() {
                   )}
 
                   <div style={{ fontSize: '0.85rem', color: 'var(--text)', marginBottom: '0.75rem' }}>
-                    <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{formatCurrency(item.basePrice)} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(Base Price)</span></p>
+                    <p style={{ margin: '0 0 0.5rem', fontWeight: 600 }}>{formatCurrency(item.basePrice, currency)} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(Base Price)</span></p>
                     <p style={{ 
                       margin: 0, 
                       color: 'var(--muted)', 
@@ -489,7 +553,7 @@ export default function MultiItemAuctionBidderPage() {
                   
                   {item.status === 'ended' && getWinnerForItem(item) && (
                     <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '8px', fontSize: '0.8rem' }}>
-                      🏆 Won by: <strong>{getWinnerForItem(item).bidder.name}</strong> at {formatCurrency(getWinnerForItem(item).bid)}
+                      🏆 Won by: <strong>{getWinnerForItem(item).bidder.name}</strong> at {formatCurrency(getWinnerForItem(item).bid, currency)}
                     </div>
                   )}
                 </div>

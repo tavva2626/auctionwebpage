@@ -6,16 +6,19 @@ import { listenAuctionRemote, updateAuctionRemote, getAuctionBidHistory } from '
 import { useAuth } from '../context/AuthContext';
 import { usePageTitle } from '../hooks/usePageTitle';
 import ModalDialog from '../components/ModalDialog';
-import NetworkAccessInfo from '../components/NetworkAccessInfo';
+import DurationPickerModal from '../components/DurationPickerModal';
+import ParticipantsList from '../components/ParticipantsList';
 import { getNetworkURL } from '../utils/networkURL';
+import { downloadWinnerPDF } from '../utils/pdfExport';
 import * as XLSX from 'xlsx';
 
 function formatTimeRemaining(ms) {
-  if (ms <= 0) return '00:00';
+  if (ms <= 0) return '00:00:00';
   const totalSeconds = Math.floor(ms / 1000);
-  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
   const seconds = String(totalSeconds % 60).padStart(2, '0');
-  return `${minutes}:${seconds}`;
+  return `${hours}:${minutes}:${seconds}`;
 }
 
 export default function HostAuctionPage() {
@@ -25,12 +28,14 @@ export default function HostAuctionPage() {
   const { user } = useAuth();
   const [auction, setAuction] = useState(null);
   const [now, setNow] = useState(Date.now());
-  const [showStartModal, setShowStartModal] = useState(false);
+  const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const isHost = user?.username === auction?.createdBy;
+  const currency = auction?.currency || 'USD';
 
   useEffect(() => {
     if (!user) {
@@ -96,21 +101,16 @@ export default function HostAuctionPage() {
   const winner = getWinner(auction);
 
   const handleStart = () => {
-    setShowStartModal(true);
+    setShowDurationPicker(true);
   };
 
-  const handleStartConfirm = async (minutes) => {
-    const numMinutes = Number(minutes) || 5;
-    if (numMinutes <= 0) {
-      setShowStartModal(false);
-      return;
-    }
-    const timerEnd = Date.now() + numMinutes * 60 * 1000;
+  const handleDurationConfirm = async (durationMs) => {
+    const timerEnd = Date.now() + durationMs;
     await updateAuctionRemote(auction.id, {
       status: 'started',
       timerEnd,
     });
-    setShowStartModal(false);
+    setShowDurationPicker(false);
   };
 
   const handleEnd = async () => {
@@ -128,7 +128,7 @@ export default function HostAuctionPage() {
     }
   };
 
-  const handleExportData = async () => {
+  const handleExportExcel = async () => {
     if (!auction || isExporting) return;
     setIsExporting(true);
     try {
@@ -148,15 +148,41 @@ export default function HostAuctionPage() {
         };
       });
 
-      const ws = XLSX.utils.json_to_sheet(rows);
+      // Add bidders summary sheet
+      const bidderRows = (auction.bidders || []).map((b, idx) => ({
+        "#": idx + 1,
+        "Bidder Name": b.name || 'Unknown',
+        "Last Bid": b.lastBid || 0,
+        "Status": (b.status || 'active').toUpperCase(),
+        "Bidder ID": b.id || '',
+      }));
+
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Audit Log");
-      XLSX.writeFile(wb, `auction-${auction.id}-audit-log.xlsx`);
+      
+      const ws1 = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws1, "Bid History");
+      
+      const ws2 = XLSX.utils.json_to_sheet(bidderRows);
+      XLSX.utils.book_append_sheet(wb, ws2, "All Bidders");
+
+      XLSX.writeFile(wb, `auction-${auction.id}-full-report.xlsx`);
 
     } catch (err) {
       alert("Failed to export data: " + err.message);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    if (isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      downloadWinnerPDF(auction, winner, currency);
+    } catch (err) {
+      alert("Failed to generate PDF: " + err.message);
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -170,6 +196,178 @@ export default function HostAuctionPage() {
     });
   };
 
+  // Completed auction view
+  if (auction.status === 'ended') {
+    return (
+      <main className="page auction-page">
+        <header className="page-header">
+          <div>
+            <h1>Host view: {auction.title}</h1>
+            <p>Created by {auction.createdBy}</p>
+          </div>
+          <div className="header-actions">
+            <Link to="/home" className="secondary">Back to home</Link>
+            <button className="secondary" onClick={() => navigate('/host/create')}>Create new auction</button>
+          </div>
+        </header>
+
+        <div className="auction-layout-container">
+          <section className="card auction-summary">
+            {/* Completion Banner */}
+            <div style={{
+              padding: '1.5rem',
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.03))',
+              borderRadius: '16px',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              marginBottom: '2rem',
+              textAlign: 'center',
+            }}>
+              <h2 style={{ margin: '0 0 0.5rem', color: '#ef4444', fontSize: '1.5rem' }}>🔴 Auction Completed</h2>
+              <p style={{ margin: 0, color: 'var(--muted)' }}>
+                This auction session has been completed. All results are final.
+              </p>
+            </div>
+
+            {/* Item Display */}
+            {auction.images?.[0] && (
+              <div style={{
+                width: '100%',
+                height: '300px',
+                backgroundColor: '#f3f4f6',
+                borderRadius: '16px',
+                overflow: 'hidden',
+                margin: '0 0 1.5rem',
+                border: '1px solid #e5e7eb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <img
+                  src={auction.images[0]}
+                  alt={auction.title}
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                />
+              </div>
+            )}
+
+            {/* Auction Details Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              gap: '1rem',
+              marginBottom: '1.5rem',
+            }}>
+              <div style={{ padding: '1rem', background: 'var(--secondary)', borderRadius: '12px', textAlign: 'center' }}>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Item</p>
+                <p style={{ margin: '0.25rem 0 0', fontWeight: 700, color: 'var(--text)' }}>{auction.title}</p>
+              </div>
+              <div style={{ padding: '1rem', background: 'var(--secondary)', borderRadius: '12px', textAlign: 'center' }}>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Base Price</p>
+                <p style={{ margin: '0.25rem 0 0', fontWeight: 700, color: '#3b82f6' }}>{formatCurrency(auction.basePrice, currency)}</p>
+              </div>
+              <div style={{ padding: '1rem', background: 'var(--secondary)', borderRadius: '12px', textAlign: 'center' }}>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Status</p>
+                <p style={{ margin: '0.25rem 0 0', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase' }}>Ended</p>
+              </div>
+              <div style={{ padding: '1rem', background: 'var(--secondary)', borderRadius: '12px', textAlign: 'center' }}>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase' }}>Bidders</p>
+                <p style={{ margin: '0.25rem 0 0', fontWeight: 700, color: 'var(--text)' }}>{auction.bidders?.length || 0}</p>
+              </div>
+            </div>
+
+            <h3>Description</h3>
+            <p style={{ lineHeight: '1.6', color: 'var(--text)' }}>{auction.description || 'No description provided.'}</p>
+
+            {auction.history && (
+              <div style={{ 
+                padding: '1rem', 
+                background: 'rgba(59, 130, 246, 0.03)', 
+                borderRadius: '10px', 
+                borderLeft: '4px solid #3b82f6',
+                margin: '1rem 0'
+              }}>
+                <h4 style={{ margin: '0 0 0.5rem', color: '#3b82f6' }}>📜 Item Provenance & History</h4>
+                <p style={{ margin: 0, fontSize: '0.95rem', fontStyle: 'italic' }}>{auction.history}</p>
+              </div>
+            )}
+
+            {/* Winner Card */}
+            <div style={{
+              margin: '2rem 0',
+              padding: '2rem',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.05))',
+              border: '2px solid rgba(34, 197, 94, 0.3)',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🏆</div>
+              <h3 style={{ margin: '0 0 0.5rem', color: '#22c55e', fontSize: '1.3rem' }}>Winner</h3>
+              {winner ? (
+                <>
+                  <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>
+                    {winner.bidder.name}
+                  </p>
+                  <p style={{ margin: '0.5rem 0 0', fontSize: '1.2rem', fontWeight: 600, color: '#22c55e' }}>
+                    Winning Bid: {formatCurrency(winner.bid, currency)}
+                  </p>
+                </>
+              ) : (
+                <p style={{ color: 'var(--muted)' }}>No bids were placed.</p>
+              )}
+            </div>
+
+            {/* Download Buttons */}
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontWeight: 600,
+                  cursor: isExporting ? 'not-allowed' : 'pointer',
+                  fontSize: '0.95rem',
+                  opacity: isExporting ? 0.7 : 1,
+                  boxShadow: '0 8px 20px rgba(16, 185, 129, 0.3)',
+                }}
+              >
+                {isExporting ? '⌛ Processing...' : '📊 Download All Bids (Excel)'}
+              </button>
+              <button
+                onClick={handleExportPdf}
+                disabled={isExportingPdf}
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontWeight: 600,
+                  cursor: isExportingPdf ? 'not-allowed' : 'pointer',
+                  fontSize: '0.95rem',
+                  opacity: isExportingPdf ? 0.7 : 1,
+                  boxShadow: '0 8px 20px rgba(239, 68, 68, 0.3)',
+                }}
+              >
+                {isExportingPdf ? '⌛ Generating...' : '📄 Download Winner Report (PDF)'}
+              </button>
+            </div>
+          </section>
+
+          <section className="card bidder-list">
+            <ParticipantsList bidders={auction.bidders || []} currency={currency} />
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  // Active/waiting auction view
   return (
     <main className="page auction-page">
       <header className="page-header">
@@ -192,7 +390,7 @@ export default function HostAuctionPage() {
         <h2>Auction details</h2>
         <div className="auction-meta">
           <div>
-            <strong>Base price:</strong> {formatCurrency(auction.basePrice)}
+            <strong>Base price:</strong> {formatCurrency(auction.basePrice, currency)}
           </div>
           <div>
             <strong>Max bidders:</strong> {auction.maxBidders}
@@ -272,16 +470,6 @@ export default function HostAuctionPage() {
               End auction now
             </button>
           )}
-          {auction.status === 'ended' && (
-            <button 
-              className="primary" 
-              onClick={handleExportData} 
-              disabled={isExporting}
-              style={{ background: '#10b981', border: 'none' }}
-            >
-              {isExporting ? '⌛ Processing...' : '⬇️ Download Audit Log (Excel)'}
-            </button>
-          )}
           <button className="secondary" onClick={handleClear}>
             Clear bidders
           </button>
@@ -289,43 +477,7 @@ export default function HostAuctionPage() {
       </section>
 
       <section className="card bidder-list">
-        <h2>Participants ({auction.bidders?.length || 0})</h2>
-        {auction.bidders?.length ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Bidder</th>
-                <th>Last bid</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {auction.bidders
-                .slice()
-                .sort((a, b) => (b.lastBid || 0) - (a.lastBid || 0))
-                .map((b, idx) => (
-                <tr key={b.id} style={{ opacity: (b.status === 'dropped' || b.status === 'left') ? 0.6 : 1 }}>
-                  <td>#{idx + 1} - {b.name}</td>
-                  <td className="bid-amount">{formatCurrency(b.lastBid ?? 0)}</td>
-                  <td>
-                    <span className="badge" style={{ 
-                      background: b.status === 'active' ? '#22c55e' : (b.status === 'dropped' ? '#ef4444' : '#f59e0b'),
-                      color: 'white',
-                      padding: '0.2rem 0.5rem',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem',
-                      fontWeight: 700
-                    }}>
-                      {(b.status || 'Active').toUpperCase()}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p>No participants yet.</p>
-        )}
+        <ParticipantsList bidders={auction.bidders || []} currency={currency} />
 
         {auction.status === 'ended' && (
           <div className="winner-box">
@@ -333,7 +485,7 @@ export default function HostAuctionPage() {
             {winner ? (
               <p>
                 <strong>{winner.bidder.name}</strong> with a bid of{' '}
-                {formatCurrency(winner.bid)}
+                {formatCurrency(winner.bid, currency)}
               </p>
             ) : (
               <p>No bids were placed.</p>
@@ -343,16 +495,10 @@ export default function HostAuctionPage() {
       </section>
       </div>
 
-      <ModalDialog
-        isOpen={showStartModal}
-        title="Start Auction"
-        message="How long should the auction run? (in minutes)"
-        type="prompt"
-        defaultValue="5"
-        onConfirm={handleStartConfirm}
-        onCancel={() => setShowStartModal(false)}
-        confirmText="Start"
-        cancelText="Cancel"
+      <DurationPickerModal
+        isOpen={showDurationPicker}
+        onConfirm={handleDurationConfirm}
+        onCancel={() => setShowDurationPicker(false)}
       />
 
       <ModalDialog
@@ -365,10 +511,6 @@ export default function HostAuctionPage() {
         confirmText="Clear"
         cancelText="Cancel"
       />
-
-      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '0 1.5rem' }}>
-        <NetworkAccessInfo />
-      </div>
     </main>
   );
 }

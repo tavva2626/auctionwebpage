@@ -2,7 +2,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { usePageTitle } from '../hooks/usePageTitle';
-import NetworkAccessInfo from '../components/NetworkAccessInfo';
 
 export default function HomePage() {
   usePageTitle('Home - Dashboard');
@@ -63,11 +62,7 @@ export default function HomePage() {
           </li>
         </ul>
       </section>
-
-      {/* Network Access Information */}
-      <div style={{ maxWidth: '800px', margin: '2rem auto 0' }}>
-        <NetworkAccessInfo />
-      </div>
     </main>
   );
 }
+

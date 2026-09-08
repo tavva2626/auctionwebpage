@@ -5,8 +5,10 @@ import { formatCurrency } from '../utils/auctionStorage';
 import { listenMultiItemAuctionRemote, updateMultiItemAuctionRemote, getAuctionBidHistory } from '../utils/firestoreAuctions';
 import { useAuth } from '../context/AuthContext';
 import { usePageTitle } from '../hooks/usePageTitle';
-import NetworkAccessInfo from '../components/NetworkAccessInfo';
+import ParticipantsList from '../components/ParticipantsList';
+import DurationPickerModal from '../components/DurationPickerModal';
 import { getNetworkURL } from '../utils/networkURL';
+import { downloadWinnerPDF } from '../utils/pdfExport';
 import * as XLSX from 'xlsx';
 
 export default function MultiItemAuctionHostPage() {
@@ -16,15 +18,17 @@ export default function MultiItemAuctionHostPage() {
   const { user } = useAuth();
   const [auction, setAuction] = useState(null);
   const [now, setNow] = useState(Date.now());
-  const [timerMinutes, setTimerMinutes] = useState('5');
+  const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [showWinnerAlert, setShowWinnerAlert] = useState(false);
   const [winnerMessage, setWinnerMessage] = useState('');
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const isHost = user?.username === auction?.createdBy;
   const currentItemIdx = auction?.currentItemIndex ?? 0;
   const currentItem = auction?.items?.[currentItemIdx];
+  const currency = auction?.currency || 'USD';
 
   useEffect(() => {
     if (!user) {
@@ -73,7 +77,7 @@ export default function MultiItemAuctionHostPage() {
       const winner = getWinnerForItem(currentItem);
       if (winner) {
         setWinnerMessage(
-          `🏆 ${winner.bidder.name} won Item ${currentItemIdx + 1}: "${currentItem.title}" at ${formatCurrency(winner.bid)}`
+          `🏆 ${winner.bidder.name} won Item ${currentItemIdx + 1}: "${currentItem.title}" at ${formatCurrency(winner.bid, currency)}`
         );
       } else {
         setWinnerMessage(
@@ -85,20 +89,22 @@ export default function MultiItemAuctionHostPage() {
       // Update item status to ended
       updateItemStatus('ended');
     }
-  }, [currentItem, now, currentItemIdx, updateItemStatus]);
+  }, [currentItem, now, currentItemIdx, updateItemStatus, currency]);
 
-  const handleStartTimer = async () => {
+  const handleStartTimer = () => {
+    setShowDurationPicker(true);
+  };
+
+  const handleDurationConfirm = async (durationMs) => {
     if (!currentItem || !auction) return;
-    const minutes = Number(timerMinutes) || 5;
-    if (minutes <= 0) return;
-
-    const timerEnd = Date.now() + minutes * 60 * 1000;
+    const timerEnd = Date.now() + durationMs;
     const items = (auction.items || []).map((item) => {
       if (item.id !== currentItem.id) return item;
       return { ...item, status: 'started', timerEnd };
     });
 
     await updateMultiItemAuctionRemote(auctionId, { items });
+    setShowDurationPicker(false);
   };
 
   const handleEndTimer = () => {
@@ -110,7 +116,6 @@ export default function MultiItemAuctionHostPage() {
     if (currentItemIdx + 1 < auction.items.length) {
       await updateMultiItemAuctionRemote(auctionId, { currentItemIndex: currentItemIdx + 1 });
       setShowWinnerAlert(false);
-      setTimerMinutes('5');
     }
   };
 
@@ -118,13 +123,12 @@ export default function MultiItemAuctionHostPage() {
     await updateMultiItemAuctionRemote(auctionId, { status: 'ended' });
   };
 
-  const handleExportData = async () => {
+  const handleExportExcel = async () => {
     if (!auction || isExporting) return;
     setIsExporting(true);
     try {
       const history = await getAuctionBidHistory(auction.id, true);
       
-      // Create a new workbook
       const wb = XLSX.utils.book_new();
 
       // Group events by item
@@ -148,19 +152,68 @@ export default function MultiItemAuctionHostPage() {
 
       // Add a sheet for each group
       Object.keys(itemGroups).forEach(title => {
-        // Sheet names must be <= 31 chars
         const safeTitle = title.substring(0, 31).replace(/[\\/?*[\]]/g, '_');
         const ws = XLSX.utils.json_to_sheet(itemGroups[title]);
         XLSX.utils.book_append_sheet(wb, ws, safeTitle);
       });
 
-      // Generate Excel file and trigger download
-      XLSX.writeFile(wb, `multi-auction-${auction.id}-audit-log.xlsx`);
+      // Add all bidders summary
+      const allBidders = [];
+      (auction.items || []).forEach((item, idx) => {
+        (item.bidders || []).forEach((b) => {
+          allBidders.push({
+            "Item #": idx + 1,
+            "Item Title": item.title,
+            "Bidder Name": b.name || 'Unknown',
+            "Last Bid": b.lastBid || 0,
+            "Status": (b.status || 'active').toUpperCase(),
+            "Bidder ID": b.id || '',
+          });
+        });
+      });
+      if (allBidders.length > 0) {
+        const wsBidders = XLSX.utils.json_to_sheet(allBidders);
+        XLSX.utils.book_append_sheet(wb, wsBidders, "All Bidders Summary");
+      }
+
+      XLSX.writeFile(wb, `multi-auction-${auction.id}-full-report.xlsx`);
 
     } catch (err) {
       alert("Failed to export: " + err.message);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    if (!auction || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      // For multi-item, we'll create a summary PDF with all winners
+      const overallWinner = (() => {
+        let best = null;
+        (auction.items || []).forEach((item) => {
+          const w = getWinnerForItem(item);
+          if (w && (!best || w.bid > best.bid)) {
+            best = w;
+          }
+        });
+        return best;
+      })();
+
+      // Create a summary auction object for the PDF
+      const summaryAuction = {
+        ...auction,
+        title: auction.name || 'Multi-Item Auction',
+        basePrice: auction.items?.reduce((sum, it) => sum + (it.basePrice || 0), 0) || 0,
+        bidders: (auction.items || []).flatMap(it => it.bidders || [])
+          .filter((b, i, arr) => arr.findIndex(x => x.id === b.id) === i),
+      };
+      downloadWinnerPDF(summaryAuction, overallWinner, currency);
+    } catch (err) {
+      alert("Failed to generate PDF: " + err.message);
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -292,7 +345,7 @@ export default function MultiItemAuctionHostPage() {
               <div>
                 <p style={{ margin: '0 0 0.25rem', color: 'var(--muted)', fontSize: '0.9rem' }}>Base Price</p>
                 <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#3b82f6' }}>
-                  {formatCurrency(currentItem.basePrice)}
+                  {formatCurrency(currentItem.basePrice, currency)}
                 </p>
               </div>
               <div>
@@ -310,37 +363,15 @@ export default function MultiItemAuctionHostPage() {
 
             {currentItem.status === 'waiting' && !currentItem.timerEnd && (
               <div>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '0.75rem',
-                  marginBottom: '1rem'
-                }}>
-                  <input
-                    type="number"
-                    min="1"
-                    max="1440"
-                    value={timerMinutes}
-                    onChange={(e) => setTimerMinutes(e.target.value)}
-                    placeholder="5"
-                    style={{
-                      padding: '0.75rem',
-                      borderRadius: '10px',
-                      border: '1px solid #e5e7eb',
-                      fontSize: '1rem',
-                      fontWeight: 600
-                    }}
-                  />
-                  <button
-                    onClick={handleStartTimer}
-                    className="primary"
-                    style={{ margin: 0 }}
-                  >
-                    Start Timer
-                  </button>
-                </div>
-                <p style={{ color: 'var(--muted)', fontSize: '0.9rem', margin: 0 }}>
-                  ℹ️ Enter minutes for how long bidding will last
+                <button
+                  onClick={handleStartTimer}
+                  className="primary"
+                  style={{ width: '100%', margin: 0 }}
+                >
+                  ⏱️ Set Duration & Start Timer
+                </button>
+                <p style={{ color: 'var(--muted)', fontSize: '0.9rem', margin: '0.75rem 0 0' }}>
+                  ℹ️ Click to set hours, minutes, and seconds for how long bidding will last
                 </p>
               </div>
             )}
@@ -428,50 +459,10 @@ export default function MultiItemAuctionHostPage() {
         <div>
           {/* Participants */}
           <div className="card" style={{ maxHeight: '70vh', overflow: 'auto' }}>
-            <h3 style={{ marginTop: 0 }}>
-              👥 Bidders ({(currentItem.bidders || []).length})
-            </h3>
-            {currentItem.bidders?.length ? (
-              <div>
-                {currentItem.bidders
-                  .slice()
-                  .sort((a, b) => (b.lastBid || 0) - (a.lastBid || 0))
-                  .map((b, idx) => (
-                    <div
-                      key={b.id}
-                      style={{
-                        padding: '0.75rem',
-                        background: 'rgba(59, 130, 246, 0.04)',
-                        borderRadius: '8px',
-                        marginBottom: '0.5rem',
-                        borderLeft: '3px solid #3b82f6',
-                        opacity: (b.status === 'left' || b.status === 'dropped') ? 0.6 : 1
-                      }}
-                    >
-                      <p style={{ margin: '0 0 0.25rem', fontWeight: 600, color: 'var(--text)' }}>
-                        #{idx + 1} - {b.name}
-                      </p>
-                      <p style={{ margin: 0, fontSize: '0.9rem', color: '#f59e0b' }}>
-                        Bid: {formatCurrency(b.lastBid || 0)}
-                      </p>
-                      <div style={{ marginTop: '0.25rem' }}>
-                        <span style={{ 
-                          fontSize: '0.7rem', 
-                          fontWeight: 700, 
-                          background: b.status === 'active' ? '#22c55e' : (b.status === 'dropped' ? '#ef4444' : '#f59e0b'),
-                          color: 'white',
-                          padding: '0.1rem 0.4rem',
-                          borderRadius: '4px'
-                        }}>
-                          {(b.status || 'Active').toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            ) : (
-              <p style={{ color: 'var(--muted)' }}>No bidders yet</p>
-            )}
+            <ParticipantsList
+              bidders={currentItem.bidders || []}
+              currency={currency}
+            />
           </div>
 
           {/* Item Navigation */}
@@ -522,9 +513,40 @@ export default function MultiItemAuctionHostPage() {
             )}
 
             {auction.status === 'ended' && (
-              <div style={{ marginTop: '1rem' }}>
-                <button onClick={handleExportData} disabled={isExporting} style={{ width: '100%', padding: '0.85rem', background: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600 }}>
-                  {isExporting ? '⌛ Processing Excel...' : '⬇️ Download Audit Log (Excel)'}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
+                <button
+                  onClick={handleExportExcel}
+                  disabled={isExporting}
+                  style={{
+                    width: '100%',
+                    padding: '0.85rem',
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontWeight: 600,
+                    cursor: isExporting ? 'not-allowed' : 'pointer',
+                    opacity: isExporting ? 0.7 : 1,
+                  }}
+                >
+                  {isExporting ? '⌛ Processing...' : '📊 Download All Bids (Excel)'}
+                </button>
+                <button
+                  onClick={handleExportPdf}
+                  disabled={isExportingPdf}
+                  style={{
+                    width: '100%',
+                    padding: '0.85rem',
+                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontWeight: 600,
+                    cursor: isExportingPdf ? 'not-allowed' : 'pointer',
+                    opacity: isExportingPdf ? 0.7 : 1,
+                  }}
+                >
+                  {isExportingPdf ? '⌛ Generating...' : '📄 Download Winner Report (PDF)'}
                 </button>
               </div>
             )}
@@ -539,9 +561,11 @@ export default function MultiItemAuctionHostPage() {
         }
       `}</style>
 
-      <div style={{ maxWidth: '800px', margin: '2rem auto 0', padding: '0 1.5rem' }}>
-        <NetworkAccessInfo />
-      </div>
+      <DurationPickerModal
+        isOpen={showDurationPicker}
+        onConfirm={handleDurationConfirm}
+        onCancel={() => setShowDurationPicker(false)}
+      />
     </main>
   );
 }

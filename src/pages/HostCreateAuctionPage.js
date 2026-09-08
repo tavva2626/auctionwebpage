@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createAuction, generateAuctionId } from '../utils/auctionStorage';
+import { createAuction, generateAuctionId, SUPPORTED_CURRENCIES } from '../utils/auctionStorage';
 import { createAuctionRemote } from '../utils/firestoreAuctions';
 import { useAuth } from '../context/AuthContext';
 import { usePageTitle } from '../hooks/usePageTitle';
@@ -16,6 +16,7 @@ export default function HostCreateAuctionPage() {
   const [basePrice, setBasePrice] = useState('');
   const [maxBidders, setMaxBidders] = useState('5');
   const [password, setPassword] = useState('');
+  const [currency, setCurrency] = useState('USD');
   const [error, setError] = useState('');
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
@@ -80,6 +81,7 @@ export default function HostCreateAuctionPage() {
       history: history.trim(),
       basePrice: Number(basePrice) || 0,
       maxBidders: Number(maxBidders) || 5,
+      currency: currency,
       images: imagePreviews,
       createdBy: user?.username || 'host',
       createdAt: Date.now(),
@@ -114,13 +116,38 @@ export default function HostCreateAuctionPage() {
         </label>
 
         <label>
-          💵 Base Price (USD)
-          <input
-            type="number"
-            value={basePrice}
-            onChange={(e) => setBasePrice(e.target.value)}
-            placeholder="0"
-          />
+          💵 Base Price
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              style={{
+                width: '140px',
+                padding: '1rem',
+                borderRadius: '12px',
+                border: '1px solid var(--input-border)',
+                background: 'var(--input-bg)',
+                color: 'var(--text)',
+                fontSize: '0.95rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: 'Outfit, sans-serif',
+              }}
+            >
+              {SUPPORTED_CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.symbol} {c.code}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              value={basePrice}
+              onChange={(e) => setBasePrice(e.target.value)}
+              placeholder="0"
+              style={{ flex: 1, marginTop: 0 }}
+            />
+          </div>
         </label>
 
         <label>

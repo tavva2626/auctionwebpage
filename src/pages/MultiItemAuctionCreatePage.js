@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createMultiItemAuction, generateAuctionId } from '../utils/auctionStorage';
+import { createMultiItemAuction, generateAuctionId, SUPPORTED_CURRENCIES } from '../utils/auctionStorage';
 import { useAuth } from '../context/AuthContext';
 import { createMultiItemAuctionRemote } from '../utils/firestoreAuctions';
 import { usePageTitle } from '../hooks/usePageTitle';
@@ -13,6 +13,7 @@ export default function MultiItemAuctionCreatePage() {
   const [auctionName, setAuctionName] = useState('');
   const [maxBidders, setMaxBidders] = useState('8');
   const [password, setPassword] = useState('');
+  const [currency, setCurrency] = useState('USD');
   const [error, setError] = useState('');
   
   const [items, setItems] = useState([]);
@@ -115,6 +116,7 @@ export default function MultiItemAuctionCreatePage() {
       name: auctionName.trim(),
       password: password.trim(),
       maxBidders: Number(maxBidders) || 8,
+      currency: currency,
       createdBy: user?.username || 'host',
       createdAt: Date.now(),
       items: items.map((item) => ({
@@ -206,13 +208,38 @@ export default function MultiItemAuctionCreatePage() {
           </label>
 
           <label>
-            💵 Base Price (USD)
-            <input
-              type="number"
-              value={currentItem.basePrice}
-              onChange={(e) => setCurrentItem({ ...currentItem, basePrice: e.target.value })}
-              placeholder="0"
-            />
+            💵 Base Price
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                style={{
+                  width: '130px',
+                  padding: '0.75rem',
+                  borderRadius: '10px',
+                  border: '1px solid var(--input-border)',
+                  background: 'var(--input-bg)',
+                  color: 'var(--text)',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'Outfit, sans-serif',
+                }}
+              >
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.symbol} {c.code}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={currentItem.basePrice}
+                onChange={(e) => setCurrentItem({ ...currentItem, basePrice: e.target.value })}
+                placeholder="0"
+                style={{ flex: 1, marginTop: 0 }}
+              />
+            </div>
           </label>
 
           <label>
