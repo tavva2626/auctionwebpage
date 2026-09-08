@@ -193,12 +193,6 @@ export default function ParticipantsList({ bidders = [], currentBidderId, curren
             <div>Waiting for bidders to join using the room link or QR code.</div>
           </div>
         ) : (
-            fontSize: '0.9rem',
-          }}>
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>👤</div>
-            No participants yet.
-          </div>
-        ) : (
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr',
