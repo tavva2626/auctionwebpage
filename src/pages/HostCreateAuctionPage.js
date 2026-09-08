@@ -109,7 +109,7 @@ export default function HostCreateAuctionPage() {
         <p>Upload images of your item and set auction details.</p>
       </header>
 
-      <form className="card form-card" onSubmit={handleCreate}>
+      <form className="card form-card" onSubmit={handleCreate} style={{ width: '100%', maxWidth: '900px', margin: '0 auto' }}>
         <label>
           📌 Auction Title
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Enter item name" />

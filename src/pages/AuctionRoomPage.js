@@ -189,7 +189,7 @@ export default function AuctionRoomPage() {
           </div>
 
           {/* Participants Sidebar */}
-          <div className="card bidder-list">
+          <div className="card bidder-list" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <ParticipantsList
               bidders={auction.bidders || []}
               currentBidderId={bidder?.bidderId}
@@ -454,7 +454,7 @@ export default function AuctionRoomPage() {
         )}
       </section>
 
-      <section className="card bid-list">
+      <section className="card bid-list" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <ParticipantsList
           bidders={auction.bidders || []}
           currentBidderId={bidder.bidderId}

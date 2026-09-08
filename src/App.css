@@ -67,10 +67,15 @@ textarea {
 }
 
 .page {
-  max-width: 1000px;
-  padding: 3rem 1.5rem 5rem;
+  width: 100%;
+  max-width: 1600px;
+  padding: 1.5rem 2rem 3rem;
   margin: 0 auto;
-  animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  min-height: calc(100vh - 1rem);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .page-header {
@@ -516,16 +521,16 @@ tbody tr:hover {
 
 .auction-layout-container {
   display: grid;
-  grid-template-columns: 1fr 400px;
-  gap: 2rem;
-  align-items: start;
+  grid-template-columns: minmax(0, 1.2fr) minmax(350px, 1fr);
+  gap: 1.5rem;
+  flex: 1;
+  width: 100%;
+  align-items: stretch;
 }
 
 .bidder-list,
 .bid-list {
-  max-height: 85vh;
-  position: sticky;
-  top: 2rem;
+  position: relative;
   overflow-y: auto;
 }
 
@@ -546,7 +551,7 @@ tbody tr:hover {
   border-radius: 4px;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 992px) {
   .auction-layout-container {
     grid-template-columns: 1fr;
   }

@@ -159,7 +159,7 @@ export default function ParticipantsList({ bidders = [], currentBidderId, curren
 
   return (
     <>
-      <div>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minHeight: '300px' }}>
         {/* Header */}
         <div style={{
           display: 'flex',
@@ -175,9 +175,24 @@ export default function ParticipantsList({ bidders = [], currentBidderId, curren
         {/* Participant Grid */}
         {bidders.length === 0 ? (
           <div style={{
-            padding: '2rem',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '3rem 1.5rem',
             textAlign: 'center',
             color: 'var(--muted)',
+            fontSize: '0.95rem',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderRadius: '16px',
+            border: '1px dashed var(--border)'
+          }}>
+            <div style={{ fontSize: '2.8rem', marginBottom: '0.75rem', opacity: 0.8 }}>👤</div>
+            <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: '0.25rem' }}>No participants yet</div>
+            <div>Waiting for bidders to join using the room link or QR code.</div>
+          </div>
+        ) : (
             fontSize: '0.9rem',
           }}>
             <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>👤</div>

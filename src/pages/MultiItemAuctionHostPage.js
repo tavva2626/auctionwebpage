@@ -297,7 +297,7 @@ export default function MultiItemAuctionHostPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
+      <div className="auction-layout-container" style={{ width: '100%' }}>
         {/* Main Content */}
         <div>
           {/* Item Display */}
@@ -456,9 +456,9 @@ export default function MultiItemAuctionHostPage() {
         </div>
 
         {/* Sidebar */}
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '1.5rem' }}>
           {/* Participants */}
-          <div className="card" style={{ maxHeight: '70vh', overflow: 'auto' }}>
+          <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             <ParticipantsList
               bidders={currentItem.bidders || []}
               currency={currency}

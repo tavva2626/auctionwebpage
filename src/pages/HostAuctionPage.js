@@ -359,7 +359,7 @@ export default function HostAuctionPage() {
             </div>
           </section>
 
-          <section className="card bidder-list">
+          <section className="card bidder-list" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <ParticipantsList bidders={auction.bidders || []} currency={currency} />
           </section>
         </div>
@@ -476,7 +476,7 @@ export default function HostAuctionPage() {
         </div>
       </section>
 
-      <section className="card bidder-list">
+      <section className="card bidder-list" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <ParticipantsList bidders={auction.bidders || []} currency={currency} />
 
         {auction.status === 'ended' && (
