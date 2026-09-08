@@ -1,4 +1,7 @@
 {
-  "buildCommand": "echo Skipped cloud build",
-  "outputDirectory": "build"
+  "buildCommand": "react-scripts build",
+  "outputDirectory": "build",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
